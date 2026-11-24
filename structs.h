@@ -24,6 +24,11 @@ struct Player {
     bool isSpeedBoosted;
     float speedBoostTimer;
     float hammerTimer;
+    int dirRow;
+    int animFrame;
+    float animTimer;
+    bool isMoving;
+    float hammerSwingTimer;
 };
 
 struct Locker {
@@ -42,6 +47,10 @@ struct Guard {
     int state;
     float stunTimer;
     bool isDefeated;
+    int dirRow;
+    int animFrame;
+    float animTimer;
+    float grabTimer;
 };
 
 struct PowerUp {
