@@ -1,0 +1,7 @@
+Project: Cipher Run
+Language: C++ (C++17)
+
+External Libraries:
+- raylib: 6.2.0
+  - Headers Path: libraries/include/ (originally from packages/raylib.6.2.0/build/native/include/)
+  - Binaries / Libraries Path: libraries/lib/ (originally from packages/raylib.6.2.0/build/native/lib/win32 or x64; contains 2 .lib files and 1 .dll file)
