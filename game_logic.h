@@ -7,76 +7,26 @@
 #include <cstring>
 #include <cmath>
 
-inline void LoadTextureSafe(const char* path, Texture2D& tex, bool& loadedFlag) {
-    loadedFlag = false;
-    if (FileExists(path)) {
-        tex = LoadTexture(path);
-        if (tex.id > 0) {
-            SetTextureFilter(tex, TEXTURE_FILTER_POINT);
-            loadedFlag = true;
+inline float GetNextObjectiveBonusTime(int nextObjectiveNum) {
+    float bonus = 16.0f - (float)(nextObjectiveNum - 1) * 2.0f;
+    if (bonus < 7.5f) bonus = 7.5f;
+    return bonus;
+}
+
+inline void BakeStaticPropsIntoChunk(char mapData[MAX_ROWS][MAX_COLS], int mapRows, int mapCols, int startCol, int endCol) {
+    if (mapRows < 4 || mapCols < 6) return;
+    if (startCol < 1) startCol = 1;
+    if (endCol > mapCols - 2) endCol = mapCols - 2;
+
+    for (int c = startCol; c <= endCol; c++) {
+        if (c % 5 == 2 && mapData[0][c] == '#' && mapData[1][c] != '#') {
+            mapData[0][c] = 'W';
         }
     }
-}
-
-inline void LoadGameAssets(GameAssets& assets) {
-    LoadTextureSafe("assets/wall.png", assets.wallTex, assets.hasWallTex);
-    LoadTextureSafe("assets/floor.png", assets.floorTex, assets.hasFloorTex);
-    LoadTextureSafe("assets/player.png", assets.playerTex, assets.hasPlayerTex);
-    LoadTextureSafe("assets/guard.png", assets.guardTex, assets.hasGuardTex);
-    LoadTextureSafe("assets/locker_closed.png", assets.lockerClosedTex, assets.hasLockerClosedTex);
-    LoadTextureSafe("assets/locker_open.png", assets.lockerOpenTex, assets.hasLockerOpenTex);
-}
-
-inline void UnloadGameAssets(GameAssets& assets) {
-    if (assets.hasWallTex) UnloadTexture(assets.wallTex);
-    if (assets.hasFloorTex) UnloadTexture(assets.floorTex);
-    if (assets.hasPlayerTex) UnloadTexture(assets.playerTex);
-    if (assets.hasGuardTex) UnloadTexture(assets.guardTex);
-    if (assets.hasLockerClosedTex) UnloadTexture(assets.lockerClosedTex);
-    if (assets.hasLockerOpenTex) UnloadTexture(assets.lockerOpenTex);
-}
-
-inline void DrawSpriteFrame3x4(bool hasTex, Texture2D tex, int frameCol, int dirRow, Rectangle dest, Color fallbackColor, Color tint) {
-    if (hasTex && tex.width >= 3 && tex.height >= 4) {
-        float frameW = floorf((float)tex.width / 3.0f);
-        float frameH = floorf((float)tex.height / 4.0f);
-        Rectangle src = {
-            floorf((float)(frameCol % 3) * frameW),
-            floorf((float)(dirRow % 4) * frameH),
-            frameW,
-            frameH
-        };
-        DrawTexturePro(tex, src, dest, { 0.0f, 0.0f }, 0.0f, tint);
-    }
-    else {
-        DrawRectangle((int)dest.x, (int)dest.y, (int)dest.width, (int)dest.height, fallbackColor);
-    }
-}
-
-inline bool LoadFacilityMap(char mapData[MAX_ROWS][MAX_COLS], int& mapRows, int& mapCols) {
-    mapRows = 0;
-    mapCols = 0;
-    std::ifstream file("level1.txt");
-    if (!file.is_open()) return false;
-
-    while (mapRows < MAX_ROWS && file.getline(mapData[mapRows], MAX_COLS)) {
-        int len = (int)strlen(mapData[mapRows]);
-        if (len > mapCols) mapCols = len;
-        mapRows++;
-    }
-    file.close();
-    return (mapRows > 0);
-}
-
-inline void FindPlayerSpawn(char mapData[MAX_ROWS][MAX_COLS], int mapRows, int mapCols, Player& player) {
-    player.x = MAP_OFFSET_X + TILE_SIZE + 7.0f;
-    player.y = MAP_OFFSET_Y + TILE_SIZE + 7.0f;
-    for (int i = 0; i < mapRows; i++) {
-        for (int j = 0; j < mapCols; j++) {
-            if (mapData[i][j] == 'S') {
-                player.x = MAP_OFFSET_X + (float)(j * TILE_SIZE) + 7.0f;
-                player.y = MAP_OFFSET_Y + (float)(i * TILE_SIZE) + 7.0f;
-                return;
+    for (int r = 1; r < mapRows - 1; r++) {
+        for (int c = startCol; c <= endCol; c++) {
+            if (mapData[r][c] == '.' && (c % 14 == 7) && (r == 1 || r == mapRows - 2)) {
+                mapData[r][c] = 'T';
             }
         }
     }
@@ -89,5 +39,35 @@ inline void UpdateGameTimer(float& levelTimer, GameState& currentState, float dt
     }
     else {
         currentState = GAME_OVER;
+    }
+}
+
+inline void ProcessEndlessEXPObjective(
+    Player& player,
+    int& objectiveNum,
+    int& currentTargetEXP,
+    float& levelTimer,
+    int& activeGuardCount,
+    int totalPoolGuards,
+    int loopCount,
+    bool& objectiveBannerActive,
+    float& objectiveBannerTimer,
+    float& lastBonusAdded
+) {
+    (void)loopCount;
+    if (player.score >= currentTargetEXP) {
+        objectiveNum++;
+        currentTargetEXP += 100 + (objectiveNum - 2) * 20;
+        float bonusTime = GetNextObjectiveBonusTime(objectiveNum);
+        levelTimer += bonusTime;
+        lastBonusAdded = bonusTime;
+
+        int desired = INITIAL_GUARDS + ((objectiveNum - 1) / 2) + 1;
+        if (desired > MAX_ACTIVE_GUARDS) desired = MAX_ACTIVE_GUARDS;
+        if (desired > totalPoolGuards) desired = totalPoolGuards;
+        activeGuardCount = desired;
+
+        objectiveBannerActive = true;
+        objectiveBannerTimer = 2.5f;
     }
 }
