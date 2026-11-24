@@ -85,4 +85,13 @@ struct GameAssets {
     bool hasPowerUpStunTex;
     Texture2D powerUpHammerTex;
     bool hasPowerUpHammerTex;
+
+    Sound hackSound;
+    bool hasHackSound;
+    Sound powerUpSound;
+    bool hasPowerUpSound;
+    Sound gameOverSound;
+    bool hasGameOverSound;
+    Sound winSound;
+    bool hasWinSound;
 };

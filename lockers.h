@@ -14,7 +14,7 @@ inline void InitializeLockers(char mapData[MAX_ROWS][MAX_COLS], int rows, int co
                 lockers[lockerCount].x = MAP_OFFSET_X + (float)(j * TILE_SIZE) + 5.0f;
                 lockers[lockerCount].y = MAP_OFFSET_Y + (float)(i * TILE_SIZE) + 5.0f;
                 lockers[lockerCount].isOpen = false;
-                lockers[lockerCount].hasDocument = (rand() % 3 == 0);
+                lockers[lockerCount].hasDocument = (rand() % 2 == 0);
                 lockerCount++;
             }
         }

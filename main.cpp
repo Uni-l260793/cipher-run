@@ -28,9 +28,26 @@ static void DrawEntityVisual(bool hasTex, Texture2D tex, Rectangle dest, Color f
     }
 }
 
+static void DrawPlayerEquippedHammer(const GameAssets& assets, const Player& player, Rectangle playerDest, float viewScale) {
+    if (player.hammerTimer <= 0.0f && player.hammerSwingTimer <= 0.0f) return;
+    float swingAngle = (player.hammerSwingTimer > 0.0f) ? ((1.0f - (player.hammerSwingTimer / 0.25f)) * 85.0f) : 0.0f;
+    float hx = playerDest.x + playerDest.width * 0.5f;
+    float hy = playerDest.y + playerDest.height * 0.55f;
+    float baseAngle = (player.dirRow == 1) ? (-35.0f - swingAngle) : (35.0f + swingAngle);
+    float hSize = roundf(42.0f * viewScale);
+    Rectangle hDest = { roundf(hx), roundf(hy), hSize, hSize };
+    if (assets.hasPowerUpHammerTex && assets.powerUpHammerTex.id > 0) {
+        DrawTexturePro(assets.powerUpHammerTex, { 0.0f, 0.0f, (float)assets.powerUpHammerTex.width, (float)assets.powerUpHammerTex.height }, hDest, { hSize * 0.5f, hSize * 0.75f }, baseAngle, WHITE);
+    }
+    else {
+        DrawRectanglePro({ roundf(hx), roundf(hy), 16.0f * viewScale, 34.0f * viewScale }, { 8.0f * viewScale, 26.0f * viewScale }, baseAngle, GOLD);
+    }
+}
+
 int main() {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT);
     InitWindow(1280, 720, "Cipher Run - Endless Facility");
+    InitAudioDevice();
     SetTargetFPS(60);
     srand((unsigned int)time(0));
 
@@ -83,9 +100,9 @@ int main() {
         }
         else if (currentState == PLAYING) {
             if (IsKeyPressed(KEY_ESCAPE)) currentState = PAUSED;
-            if (objectiveBannerActive) {
-                objectiveBannerTimer -= dt;
-                if (objectiveBannerTimer <= 0.0f) objectiveBannerActive = false;
+            if (player.hammerSwingTimer > 0.0f) {
+                player.hammerSwingTimer -= dt;
+                if (player.hammerSwingTimer < 0.0f) player.hammerSwingTimer = 0.0f;
             }
 
             float frameStep = dt * 60.0f;
@@ -137,9 +154,12 @@ int main() {
                 difficultyStep = loopCount + (objectiveNum - 1);
             }
 
+            int prevScore = player.score;
             CheckLockerInteraction(player, lockers, lockerCount);
             UpdatePowerUps(player, powerUps, powerUpCount, guards, activeGuardCount);
             UpdateGuards(guards, activeGuardCount, player, currentState, mapData, mapRows, mapCols, difficultyStep);
+            if (player.score > prevScore && assets.hasHackSound) PlaySound(assets.hackSound);
+
             ProcessEndlessEXPObjective(
                 player, objectiveNum, currentTargetEXP, levelTimer,
                 activeGuardCount, guardCount, loopCount,
@@ -181,6 +201,7 @@ int main() {
             }
             Rectangle pDest = { roundf((player.x - cameraX - 15.0f) * viewScale), roundf((player.y - cameraY - 24.0f) * viewScale), roundf(60.0f * viewScale), roundf(68.0f * viewScale) };
             DrawSpriteFrame3x4(assets.hasPlayerTex, assets.playerTex, player.animFrame, player.dirRow, pDest, BLUE, WHITE);
+            DrawPlayerEquippedHammer(assets, player, pDest, viewScale);
             DrawText(TextFormat("Obj #%d: %d EXP | EXP: %d | Time: %.1fs", objectiveNum, currentTargetEXP, player.score, levelTimer), 20, 16, 22, YELLOW);
         }
         else if (currentState == PAUSED) {
@@ -193,6 +214,7 @@ int main() {
     }
 
     UnloadGameAssets(assets);
+    CloseAudioDevice();
     CloseWindow();
     return 0;
 }
