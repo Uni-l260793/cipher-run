@@ -1,0 +1,21 @@
+# Visual Studio build & cache folders
+.vs/
+Debug/
+Release/
+x64/
+Win32/
+ipch/
+
+# Compiler & build logs/artifacts
+*.obj
+*.ilk
+*.pdb
+*.tlog
+*.lastbuildstate
+*.log
+*.exe
+*.exp
+
+# OS & editor files
+Thumbs.db
+.DS_Store
