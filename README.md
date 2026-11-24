@@ -9,8 +9,6 @@ As the player moves forward past the corridor trigger, the facility world seamle
 You'll have fun playing this. (GOOD LUCK)
 ### Screenshots
 
-Add your project screenshots under `screenshots/` and update the paths below as needed:
-
 * Main Menu: ![Main Menu](screenshots/main_menu.png)
 * Gameplay & HUD: ![GamePlay](screenshots/gameplay.png)
 * Power-Ups & Pause Screen: ![Pause Screen](screenshots/pause_menu.png)
