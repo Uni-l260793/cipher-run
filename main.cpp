@@ -8,10 +8,34 @@
 
 using namespace std;
 
+static float ComputeCrispIntegerScale(int screenWidth, int screenHeight, int mapRows) {
+    float mapPixelH = (float)(mapRows > 0 ? mapRows : 12) * TILE_SIZE;
+    if (mapPixelH < 1.0f) mapPixelH = 1.0f;
+    int rawScale = (int)floorf((float)screenHeight / mapPixelH);
+    if (rawScale < 2) rawScale = 2;
+    if (rawScale > 3) rawScale = 3;
+    return (float)rawScale;
+}
+
+static void DrawEntityVisual(bool hasTex, Texture2D tex, Rectangle dest, Color fallbackColor, Color tint) {
+    if (hasTex && tex.id > 0) {
+        Rectangle src = { 0.0f, 0.0f, (float)tex.width, (float)tex.height };
+        Rectangle snappedDest = { roundf(dest.x), roundf(dest.y), roundf(dest.width), roundf(dest.height) };
+        DrawTexturePro(tex, src, snappedDest, { 0.0f, 0.0f }, 0.0f, tint);
+    }
+    else {
+        DrawRectangle((int)roundf(dest.x), (int)roundf(dest.y), (int)roundf(dest.width), (int)roundf(dest.height), fallbackColor);
+    }
+}
+
 int main() {
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT);
     InitWindow(1280, 720, "Cipher Run - Endless Facility");
     SetTargetFPS(60);
     srand((unsigned int)time(0));
+
+    GameAssets assets = { 0 };
+    LoadGameAssets(assets);
 
     GameState currentState = MAIN_MENU;
     char mapData[MAX_ROWS][MAX_COLS] = { 0 };
@@ -35,6 +59,12 @@ int main() {
         float dt = GetFrameTime();
         if (dt > 0.033f) dt = 0.033f;
 
+        int screenWidth = GetScreenWidth();
+        int screenHeight = GetScreenHeight();
+        float viewScale = ComputeCrispIntegerScale(screenWidth, screenHeight, mapRows);
+
+        if (IsKeyPressed(KEY_F11)) ToggleFullscreen();
+
         if (currentState == MAIN_MENU && IsKeyPressed(KEY_ENTER)) {
             if (LoadFacilityMap(mapData, mapRows, mapCols)) {
                 BakeStaticPropsIntoChunk(mapData, mapRows, mapCols, 1, mapCols - 2);
@@ -49,7 +79,6 @@ int main() {
             currentTargetEXP = 100;
             loopCount = 1;
             levelTimer = 24.0f;
-            objectiveBannerActive = false;
             currentState = PLAYING;
         }
         else if (currentState == PLAYING) {
@@ -59,12 +88,24 @@ int main() {
                 if (objectiveBannerTimer <= 0.0f) objectiveBannerActive = false;
             }
 
-            float moveSpeed = player.isSpeedBoosted ? (player.speed * 1.70f) : player.speed;
+            float frameStep = dt * 60.0f;
+            float moveSpeed = (player.isSpeedBoosted ? (player.speed * 1.70f) : player.speed) * frameStep;
             float oldX = player.x, oldY = player.y;
-            if (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP)) { player.y -= moveSpeed; player.dirRow = 3; }
-            if (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN)) { player.y += moveSpeed; player.dirRow = 0; }
-            if (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT)) { player.x -= moveSpeed; player.dirRow = 1; }
-            if (IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT)) { player.x += moveSpeed; player.dirRow = 2; }
+            bool moving = false;
+
+            if (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP)) { player.y -= moveSpeed; player.dirRow = 3; moving = true; }
+            if (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN)) { player.y += moveSpeed; player.dirRow = 0; moving = true; }
+            if (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT)) { player.x -= moveSpeed; player.dirRow = 1; moving = true; }
+            if (IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT)) { player.x += moveSpeed; player.dirRow = 2; moving = true; }
+
+            player.isMoving = moving;
+            if (moving) {
+                player.animTimer += dt;
+                if (player.animTimer >= 0.10f) { player.animTimer = 0.0f; player.animFrame = (player.animFrame + 1) % 3; }
+            }
+            else {
+                player.animFrame = 1;
+            }
 
             Rectangle rectX = { player.x, oldY, 26.0f, 26.0f };
             for (int i = 0; i < mapRows; i++) {
@@ -106,9 +147,9 @@ int main() {
             );
             UpdateGameTimer(levelTimer, currentState, dt);
 
-            targetCamX = player.x - 480.0f;
+            targetCamX = player.x - ((float)screenWidth / viewScale) * 0.40f;
             if (targetCamX < 0.0f) targetCamX = 0.0f;
-            cameraX += (targetCamX - cameraX) * 0.12f;
+            cameraX += (targetCamX - cameraX) * 0.14f;
         }
         else if (currentState == PAUSED) {
             if (IsKeyPressed(KEY_R)) currentState = PLAYING;
@@ -121,37 +162,37 @@ int main() {
         BeginDrawing();
         ClearBackground(Color{ 14, 17, 24, 255 });
         if (currentState == MAIN_MENU) {
-            DrawText("CIPHER RUN - PRESS ENTER", 420, 320, 32, GREEN);
+            DrawText("CIPHER RUN - PRESS ENTER TO START", screenWidth / 2 - 240, screenHeight / 2 - 20, 30, GREEN);
         }
         else if (currentState == PLAYING) {
+            float tileW = roundf(TILE_SIZE * viewScale);
+            float tileH = roundf(TILE_SIZE * viewScale);
             for (int i = 0; i < mapRows; i++) {
                 for (int j = 0; j < mapCols; j++) {
-                    float dx = MAP_OFFSET_X + j * TILE_SIZE - cameraX;
-                    float dy = MAP_OFFSET_Y + i * TILE_SIZE - cameraY;
-                    if (mapData[i][j] == '#' || mapData[i][j] == 'W') DrawRectangle((int)dx, (int)dy, TILE_SIZE, TILE_SIZE, DARKGRAY);
-                    else DrawRectangle((int)dx, (int)dy, TILE_SIZE - 1, TILE_SIZE - 1, Color{ 24, 28, 36, 255 });
+                    float dx = roundf((MAP_OFFSET_X + j * TILE_SIZE - cameraX) * viewScale);
+                    float dy = roundf((MAP_OFFSET_Y + i * TILE_SIZE - cameraY) * viewScale);
+                    if (mapData[i][j] == '#' || mapData[i][j] == 'W') {
+                        DrawEntityVisual(assets.hasWallTex, assets.wallTex, { dx, dy, tileW, tileH }, DARKGRAY, WHITE);
+                    }
+                    else {
+                        DrawEntityVisual(assets.hasFloorTex, assets.floorTex, { dx, dy, tileW, tileH }, Color{ 24, 28, 36, 255 }, WHITE);
+                    }
                 }
             }
-            for (int i = 0; i < lockerCount; i++) {
-                DrawRectangle((int)(lockers[i].x - cameraX), (int)(lockers[i].y - cameraY), 26, 26, lockers[i].isOpen ? ORANGE : BROWN);
-            }
-            for (int i = 0; i < powerUpCount; i++) {
-                if (powerUps[i].isActive) DrawRectangle((int)(powerUps[i].x - cameraX), (int)(powerUps[i].y - cameraY), 24, 24, GOLD);
-            }
-            for (int i = 0; i < activeGuardCount; i++) {
-                if (!guards[i].isDefeated) DrawRectangle((int)(guards[i].x - cameraX), (int)(guards[i].y - cameraY), 24, 24, RED);
-            }
-            DrawRectangle((int)(player.x - cameraX), (int)(player.y - cameraY), 26, 26, BLUE);
-            DrawText(TextFormat("Obj #%d: %d EXP | EXP: %d | Loop #%d | Time: %.1fs", objectiveNum, currentTargetEXP, player.score, loopCount, levelTimer), 20, 16, 20, YELLOW);
+            Rectangle pDest = { roundf((player.x - cameraX - 15.0f) * viewScale), roundf((player.y - cameraY - 24.0f) * viewScale), roundf(60.0f * viewScale), roundf(68.0f * viewScale) };
+            DrawSpriteFrame3x4(assets.hasPlayerTex, assets.playerTex, player.animFrame, player.dirRow, pDest, BLUE, WHITE);
+            DrawText(TextFormat("Obj #%d: %d EXP | EXP: %d | Time: %.1fs", objectiveNum, currentTargetEXP, player.score, levelTimer), 20, 16, 22, YELLOW);
         }
         else if (currentState == PAUSED) {
-            DrawText("PAUSED - R: Resume | M: Menu", 420, 320, 28, YELLOW);
+            DrawText("PAUSED - R: Resume | M: Menu", screenWidth / 2 - 190, screenHeight / 2 - 20, 28, YELLOW);
         }
         else if (currentState == GAME_OVER) {
-            DrawText(TextFormat("GAME OVER | Obj #%d | EXP: %d", objectiveNum, player.score), 380, 320, 28, RED);
+            DrawText(TextFormat("GAME OVER | EXP: %d | ENTER to Retry", player.score), screenWidth / 2 - 220, screenHeight / 2 - 20, 28, RED);
         }
         EndDrawing();
     }
+
+    UnloadGameAssets(assets);
     CloseWindow();
     return 0;
 }
