@@ -18,14 +18,20 @@ inline void InitializeLockers(char mapData[MAX_ROWS][MAX_COLS], int rows, int co
     }
 }
 
+inline void ShiftLockersWorldX(Locker lockers[], int lockerCount, float shiftX) {
+    for (int i = 0; i < lockerCount; i++) {
+        lockers[i].x -= shiftX;
+    }
+}
+
 inline void CheckLockerInteraction(Player& player, Locker lockers[], int lockerCount) {
-    Rectangle playerRect = { player.x - 4.0f, player.y - 4.0f, 34.0f, 34.0f };
+    Rectangle playerRect = { player.x - 6.0f, player.y - 6.0f, 38.0f, 38.0f };
     for (int i = 0; i < lockerCount; i++) {
         if (!lockers[i].isOpen) {
-            Rectangle lockerRect = { lockers[i].x, lockers[i].y, 26.0f, 26.0f };
+            Rectangle lockerRect = { lockers[i].x - 2.0f, lockers[i].y - 2.0f, 30.0f, 30.0f };
             if (CheckCollisionRecs(playerRect, lockerRect)) {
                 lockers[i].isOpen = true;
-                player.score += 15;
+                player.score += lockers[i].hasDocument ? 25 : 15;
             }
         }
     }

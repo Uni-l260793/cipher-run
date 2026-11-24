@@ -21,6 +21,9 @@ struct Player {
     float speed;
     int health;
     int score;
+    bool isSpeedBoosted;
+    float speedBoostTimer;
+    float hammerTimer;
 };
 
 struct Locker {
