@@ -5,8 +5,11 @@
 
 inline void InitializeLockers(char mapData[MAX_ROWS][MAX_COLS], int rows, int cols, Locker lockers[], int& lockerCount) {
     lockerCount = 0;
-    for (int i = 0; i < rows; i++) {
-        for (int j = 0; j < cols; j++) {
+    if (rows > MAX_ROWS) rows = MAX_ROWS;
+    if (cols > MAX_COLS) cols = MAX_COLS;
+
+    for (int i = 1; i < rows - 1; i++) {
+        for (int j = 1; j < cols - 1; j++) {
             if (mapData[i][j] == 'L' && lockerCount < MAX_LOCKERS) {
                 lockers[lockerCount].x = MAP_OFFSET_X + (float)(j * TILE_SIZE) + 5.0f;
                 lockers[lockerCount].y = MAP_OFFSET_Y + (float)(i * TILE_SIZE) + 5.0f;
