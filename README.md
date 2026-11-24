@@ -12,7 +12,7 @@ You'll have fun playing this. (GOOD LUCK)
 Add your project screenshots under `screenshots/` and update the paths below as needed:
 
 * Main Menu: `![Main Menu](screenshots/main_menu.png)`
-* Gameplay & HUD: `![Gameplay](screenshots/gameplay.png)`
+* Gameplay & HUD: screenshots/gameplay.png
 * Power-Ups & Pause Screen: `![Pause Screen](screenshots/pause_menu.png)`
 
 ---
