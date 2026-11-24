@@ -59,3 +59,30 @@ struct PowerUp {
     int type;
     bool isActive;
 };
+
+struct GameAssets {
+    Texture2D wallTex;
+    bool hasWallTex;
+    Texture2D floorTex;
+    bool hasFloorTex;
+    Texture2D windowTex;
+    bool hasWindowTex;
+    Texture2D plantTex;
+    bool hasPlantTex;
+    Texture2D playerTex;
+    bool hasPlayerTex;
+    Texture2D guardTex;
+    bool hasGuardTex;
+    Texture2D lockerClosedTex;
+    bool hasLockerClosedTex;
+    Texture2D lockerOpenTex;
+    bool hasLockerOpenTex;
+    Texture2D powerUpTex;
+    bool hasPowerUpTex;
+    Texture2D powerUpSpeedTex;
+    bool hasPowerUpSpeedTex;
+    Texture2D powerUpStunTex;
+    bool hasPowerUpStunTex;
+    Texture2D powerUpHammerTex;
+    bool hasPowerUpHammerTex;
+};
