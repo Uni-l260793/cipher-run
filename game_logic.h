@@ -12,6 +12,32 @@
 #define PI 3.14159265358979323846f
 #endif
 
+// Loads custom background music from assets/ if present (bgm.ogg / bgm.wav / bgm.mp3 / music.*)
+inline bool TryLoadCustomMusic(Music& outMusic, bool& loadedFlag) {
+    loadedFlag = false;
+    const char* candidates[5] = {
+        "assets/bgm.ogg",
+        "assets/bgm.wav",
+        "assets/bgm.mp3",
+        "assets/music.ogg",
+        "assets/music.mp3"
+    };
+    for (int i = 0; i < 5; i++) {
+        if (FileExists(candidates[i])) {
+            outMusic = LoadMusicStream(candidates[i]);
+            if (outMusic.ctxData != nullptr || outMusic.frameCount > 0) {
+                outMusic.looping = true;
+                SetMusicVolume(outMusic, 0.35f);
+                PlayMusicStream(outMusic);
+                loadedFlag = true;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Generates a crisp retro PCM Sound effect so SFX always work even if external .wav files are absent
 inline Sound GenerateRetroSfx(int mode) {
     int sampleRate = 44100;
     float duration = 0.16f;
@@ -37,11 +63,21 @@ inline Sound GenerateRetroSfx(int mode) {
         float env = 1.0f - progress;
         float freq = 440.0f;
 
-        if (mode == 1) freq = 520.0f + progress * 380.0f;
-        else if (mode == 2) freq = 360.0f + sinf(progress * PI * 2.0f) * 240.0f + progress * 220.0f;
-        else if (mode == 3) freq = 310.0f - progress * 210.0f;
-        else if (mode == 4) freq = (progress < 0.5f) ? 587.33f : 880.0f;
-        else if (mode == 5) freq = 240.0f - progress * 140.0f;
+        if (mode == 1) {
+            freq = 520.0f + progress * 380.0f;
+        }
+        else if (mode == 2) {
+            freq = 360.0f + sinf(progress * PI * 2.0f) * 240.0f + progress * 220.0f;
+        }
+        else if (mode == 3) {
+            freq = 310.0f - progress * 210.0f;
+        }
+        else if (mode == 4) {
+            freq = (progress < 0.5f) ? 587.33f : 880.0f;
+        }
+        else if (mode == 5) {
+            freq = 240.0f - progress * 140.0f;
+        }
 
         float waveVal = (sinf(2.0f * PI * freq * t) >= 0.0f) ? 0.55f : -0.55f;
         waveVal = waveVal * 0.65f + sinf(2.0f * PI * freq * t) * 0.35f;
@@ -53,6 +89,7 @@ inline Sound GenerateRetroSfx(int mode) {
     return snd;
 }
 
+// Generates a looping synth facility BGM stream when no external BGM file is provided
 inline AudioStream GenerateRetroBgmStream() {
     if (!IsAudioDeviceReady()) return AudioStream{ 0 };
     int sampleRate = 44100;
@@ -67,8 +104,16 @@ inline AudioStream GenerateRetroBgmStream() {
 inline void PumpRetroBgmStream(AudioStream& stream, float& bgmPhase, float& stepTimer, int& stepIndex, bool musicMuted, float dt) {
     (void)dt;
     if (!IsAudioDeviceReady() || stream.buffer == nullptr) return;
-    SetAudioStreamVolume(stream, musicMuted ? 0.0f : 0.22f);
-    if (!IsAudioStreamPlaying(stream)) PlayAudioStream(stream);
+    if (musicMuted) {
+        SetAudioStreamVolume(stream, 0.0f);
+    }
+    else {
+        SetAudioStreamVolume(stream, 0.22f);
+    }
+
+    if (!IsAudioStreamPlaying(stream)) {
+        PlayAudioStream(stream);
+    }
 
     const int notes[16] = {
         110, 110, 146, 110, 164, 146, 130, 110,
@@ -88,15 +133,19 @@ inline void PumpRetroBgmStream(AudioStream& stream, float& bgmPhase, float& step
                 stepTimer -= 0.22f;
                 stepIndex = (stepIndex + 1) % 16;
             }
+
             float freq = (float)notes[stepIndex];
             bgmPhase += (2.0f * PI * freq) / sampleRate;
-            if (bgmPhase > 2.0f * PI) bgmPhase -= 2.0f * PI;
+            if (bgmPhase > 2.0f * PI) {
+                bgmPhase -= 2.0f * PI;
+            }
 
             float sub = sinf(bgmPhase * 0.5f) * 0.35f;
             float pulse = (sinf(bgmPhase) >= 0.0f) ? 0.22f : -0.22f;
             float gate = 0.55f + 0.45f * sinf((stepTimer / 0.22f) * PI);
             buffer[i] = (short)((sub + pulse) * gate * 7000.0f);
         }
+
         UpdateAudioStream(stream, buffer, chunkFrames);
     }
 }
@@ -116,11 +165,15 @@ inline void LoadSoundSafe(const char* path, Sound& snd, bool& loadedFlag, int fa
     loadedFlag = false;
     if (IsAudioDeviceReady() && FileExists(path)) {
         snd = LoadSound(path);
-        if (snd.frameCount > 0) loadedFlag = true;
+        if (snd.frameCount > 0) {
+            loadedFlag = true;
+        }
     }
     if (!loadedFlag && IsAudioDeviceReady()) {
         snd = GenerateRetroSfx(fallbackMode);
-        if (snd.frameCount > 0) loadedFlag = true;
+        if (snd.frameCount > 0) {
+            loadedFlag = true;
+        }
     }
 }
 
@@ -168,37 +221,71 @@ inline void UnloadGameAssets(GameAssets& assets) {
     if (assets.hasSmashSound) UnloadSound(assets.smashSound);
 }
 
-inline void DrawSpriteFrame3x4(bool hasTex, Texture2D tex, int frameCol, int dirRow, Rectangle dest, Color fallbackColor, Color tint) {
+inline void DrawSpriteFrame3x4(
+    bool hasTex,
+    Texture2D tex,
+    int frameCol,
+    int dirRow,
+    Rectangle dest,
+    Color fallbackColor,
+    Color tint
+) {
     if (hasTex && tex.width >= 3 && tex.height >= 4) {
-        float frameW = floorf((float)tex.width / 3.0f);
-        float frameH = floorf((float)tex.height / 4.0f);
+        int cols = 3;
+        int rows = 4;
+        float frameW = floorf((float)tex.width / (float)cols);
+        float frameH = floorf((float)tex.height / (float)rows);
+        if (frameW < 1.0f) frameW = 1.0f;
+        if (frameH < 1.0f) frameH = 1.0f;
+
+        if (frameCol < 0) frameCol = 0;
+        if (frameCol >= cols) frameCol = frameCol % cols;
+        if (dirRow < 0) dirRow = 0;
+        if (dirRow >= rows) dirRow = dirRow % rows;
+
         Rectangle src = {
-            floorf((float)(frameCol % 3) * frameW),
-            floorf((float)(dirRow % 4) * frameH),
+            floorf((float)frameCol * frameW),
+            floorf((float)dirRow * frameH),
             frameW,
             frameH
         };
-        DrawTexturePro(tex, src, dest, { 0.0f, 0.0f }, 0.0f, tint);
+        Rectangle snappedDest = {
+            floorf(dest.x),
+            floorf(dest.y),
+            floorf(dest.width),
+            floorf(dest.height)
+        };
+        Vector2 origin = { 0.0f, 0.0f };
+        DrawTexturePro(tex, src, snappedDest, origin, 0.0f, tint);
     }
     else {
-        DrawRectangle((int)dest.x, (int)dest.y, (int)dest.width, (int)dest.height, fallbackColor);
+        DrawRectangle((int)floorf(dest.x), (int)floorf(dest.y), (int)floorf(dest.width), (int)floorf(dest.height), fallbackColor);
     }
 }
 
 inline bool LoadFacilityMap(char mapData[MAX_ROWS][MAX_COLS], int& mapRows, int& mapCols) {
     mapRows = 0;
     mapCols = 0;
-    for (int r = 0; r < MAX_ROWS; r++)
-        for (int c = 0; c < MAX_COLS; c++) mapData[r][c] = '\0';
+
+    for (int r = 0; r < MAX_ROWS; r++) {
+        for (int c = 0; c < MAX_COLS; c++) {
+            mapData[r][c] = '\0';
+        }
+    }
 
     std::ifstream file("level1.txt");
-    if (!file.is_open()) return false;
+    if (!file.is_open()) {
+        return false;
+    }
 
     while (mapRows < MAX_ROWS && file.getline(mapData[mapRows], MAX_COLS)) {
         int len = (int)strlen(mapData[mapRows]);
-        if (len > mapCols) mapCols = len;
+        if (len > mapCols) {
+            mapCols = len;
+        }
         mapRows++;
     }
+
     file.close();
     return (mapRows > 0);
 }
@@ -206,6 +293,7 @@ inline bool LoadFacilityMap(char mapData[MAX_ROWS][MAX_COLS], int& mapRows, int&
 inline void FindPlayerSpawn(char mapData[MAX_ROWS][MAX_COLS], int mapRows, int mapCols, Player& player) {
     player.x = MAP_OFFSET_X + TILE_SIZE + 7.0f;
     player.y = MAP_OFFSET_Y + TILE_SIZE + 7.0f;
+
     for (int i = 0; i < mapRows; i++) {
         for (int j = 0; j < mapCols; j++) {
             if (mapData[i][j] == 'S') {
@@ -219,90 +307,297 @@ inline void FindPlayerSpawn(char mapData[MAX_ROWS][MAX_COLS], int mapRows, int m
 
 inline float GetNextObjectiveBonusTime(int nextObjectiveNum) {
     float bonus = 16.0f - (float)(nextObjectiveNum - 1) * 2.0f;
-    return (bonus < 7.5f) ? 7.5f : bonus;
+    if (bonus < 7.5f) {
+        bonus = 7.5f;
+    }
+    return bonus;
 }
 
-inline void BakeStaticPropsIntoChunk(char mapData[MAX_ROWS][MAX_COLS], int mapRows, int mapCols, int startCol, int endCol) {
+inline void BakeStaticPropsIntoChunk(
+    char mapData[MAX_ROWS][MAX_COLS],
+    int mapRows,
+    int mapCols,
+    int startCol,
+    int endCol
+) {
     if (mapRows < 4 || mapCols < 6) return;
     if (startCol < 1) startCol = 1;
     if (endCol > mapCols - 2) endCol = mapCols - 2;
 
     for (int c = startCol; c <= endCol; c++) {
-        if (c % 5 == 2 && mapData[0][c] == '#' && mapData[1][c] != '#') mapData[0][c] = 'W';
+        if (c % 5 == 2 && mapData[0][c] == '#' && mapData[1][c] != '#') {
+            mapData[0][c] = 'W';
+        }
     }
+
     for (int r = 1; r < mapRows - 1; r++) {
         for (int c = startCol; c <= endCol; c++) {
-            if (mapData[r][c] == '.' && (c % 14 == 7) && (r == 1 || r == mapRows - 2)) mapData[r][c] = 'T';
+            if (mapData[r][c] == '.' && (c % 14 == 7) && (r == 1 || r == mapRows - 2)) {
+                int openNeighbors = 0;
+                if (mapData[r - 1][c] == '.' || mapData[r - 1][c] == 'T') openNeighbors++;
+                if (mapData[r + 1][c] == '.' || mapData[r + 1][c] == 'T') openNeighbors++;
+                if (mapData[r][c - 1] == '.' || mapData[r][c - 1] == 'T') openNeighbors++;
+                if (mapData[r][c + 1] == '.' || mapData[r][c + 1] == 'T') openNeighbors++;
+
+                if (openNeighbors >= 3) {
+                    mapData[r][c] = 'T';
+                }
+            }
         }
     }
 }
 
-inline void MutateForwardCorridorChunk(char mapData[MAX_ROWS][MAX_COLS], int mapRows, int mapCols, int startCol, int endCol, int difficultyStep) {
-    if (mapRows < 4 || mapCols < 6 || startCol >= endCol) return;
-    int coverChance = 28 + (difficultyStep > 5 ? 5 : difficultyStep) * 3;
+inline void MutateForwardCorridorChunk(
+    char mapData[MAX_ROWS][MAX_COLS],
+    int mapRows,
+    int mapCols,
+    int startCol,
+    int endCol,
+    int difficultyStep
+) {
+    if (mapRows < 4 || mapCols < 6) return;
+    if (startCol < 2) startCol = 2;
+    if (endCol > mapCols - 2) endCol = mapCols - 2;
+    if (startCol >= endCol) return;
+
+    int clampedDiff = (difficultyStep > 5) ? 5 : difficultyStep;
+    int coverChance = 28 + clampedDiff * 3;
+    if (coverChance > 46) coverChance = 46;
+
     int laneA = 1 + (rand() % (mapRows - 2));
     int laneB = (laneA + 2 <= mapRows - 2) ? (laneA + 2) : (1 + ((laneA + 1) % (mapRows - 2)));
 
     for (int c = startCol; c < endCol; c++) {
         int colPhase = (c - startCol) % 6;
         bool isJunction = (colPhase == 0 || colPhase == 3);
+        bool isCoverWallCol = (colPhase == 2 || colPhase == 5);
+
         for (int r = 1; r < mapRows - 1; r++) {
-            if (mapData[r][c] == 'S') mapData[r][c] = '.';
-            if (isJunction || r == laneA || r == laneB) mapData[r][c] = '.';
-            else mapData[r][c] = (rand() % 100 < coverChance) ? '#' : '.';
+            if (mapData[r][c] == 'S') {
+                mapData[r][c] = '.';
+            }
+
+            if (isJunction || r == laneA || r == laneB) {
+                mapData[r][c] = '.';
+            }
+            else if (isCoverWallCol) {
+                bool prevWall = (r > 1 && mapData[r - 1][c] == '#');
+                if (!prevWall && (rand() % 100 < (coverChance + 16))) {
+                    mapData[r][c] = '#';
+                }
+                else {
+                    mapData[r][c] = '.';
+                }
+            }
+            else {
+                bool prevWall = (r > 1 && mapData[r - 1][c] == '#');
+                if (!prevWall && (rand() % 100 < coverChance)) {
+                    mapData[r][c] = '#';
+                }
+                else {
+                    mapData[r][c] = '.';
+                }
+            }
         }
+
+        if (colPhase == 1 && mapRows > 4) {
+            int topR = (laneA < laneB) ? laneA : laneB;
+            int botR = (laneA < laneB) ? laneB : laneA;
+            for (int r = topR; r <= botR; r++) {
+                mapData[r][c] = '.';
+            }
+        }
+
         if (!isJunction && (c % 3 == 1)) {
-            int lr = 1 + (rand() % (mapRows - 2));
-            if (mapData[lr][c] == '.') mapData[lr][c] = 'L';
+            int lRow = 1 + (rand() % (mapRows - 2));
+            if (mapData[lRow][c] == '.') {
+                mapData[lRow][c] = 'L';
+            }
         }
+
         if (!isJunction && (c % 6 == 4) && (rand() % 100 < 60)) {
-            int pr = 1 + (rand() % (mapRows - 2));
-            if (mapData[pr][c] == '.') mapData[pr][c] = 'P';
+            int pRow = 1 + (rand() % (mapRows - 2));
+            if (mapData[pRow][c] == '.') {
+                mapData[pRow][c] = 'P';
+            }
         }
     }
+
+    for (int c = endCol - 2; c <= endCol && c < mapCols - 1; c++) {
+        if (c >= 1) {
+            for (int r = 1; r < mapRows - 1; r++) {
+                if (mapData[r][c] == '#') {
+                    mapData[r][c] = '.';
+                }
+            }
+        }
+    }
+
     BakeStaticPropsIntoChunk(mapData, mapRows, mapCols, startCol, endCol);
 }
 
-inline void AppendLockersInColumnRange(char mapData[MAX_ROWS][MAX_COLS], int mapRows, int colStart, int colEnd, Locker lockers[], int& lockerCount) {
+inline void AppendLockersInColumnRange(
+    char mapData[MAX_ROWS][MAX_COLS],
+    int mapRows,
+    int colStart,
+    int colEnd,
+    Locker lockers[],
+    int& lockerCount
+) {
+    if (colStart < 1) colStart = 1;
     for (int i = 1; i < mapRows - 1; i++) {
         for (int j = colStart; j < colEnd; j++) {
             if (mapData[i][j] == 'L' && lockerCount < MAX_LOCKERS) {
-                lockers[lockerCount] = { MAP_OFFSET_X + j * TILE_SIZE + 5.0f, MAP_OFFSET_Y + i * TILE_SIZE + 5.0f, false, (rand() % 2 == 0) };
+                lockers[lockerCount].x = MAP_OFFSET_X + (float)(j * TILE_SIZE) + 5.0f;
+                lockers[lockerCount].y = MAP_OFFSET_Y + (float)(i * TILE_SIZE) + 5.0f;
+                lockers[lockerCount].isOpen = false;
+                lockers[lockerCount].hasDocument = (rand() % 2 == 0);
                 lockerCount++;
             }
         }
     }
 }
 
-inline void AppendPowerUpsInColumnRange(char mapData[MAX_ROWS][MAX_COLS], int mapRows, int colStart, int colEnd, PowerUp powerUps[], int& powerUpCount) {
+inline void AppendPowerUpsInColumnRange(
+    char mapData[MAX_ROWS][MAX_COLS],
+    int mapRows,
+    int colStart,
+    int colEnd,
+    PowerUp powerUps[],
+    int& powerUpCount
+) {
+    if (colStart < 1) colStart = 1;
+    int seenP = 0;
+
     for (int i = 1; i < mapRows - 1; i++) {
         for (int j = colStart; j < colEnd; j++) {
             if (mapData[i][j] == 'P' && powerUpCount < MAX_POWERUPS) {
+                seenP++;
+                if ((seenP % 2 != 0) && (rand() % 100 < 40)) {
+                    continue;
+                }
+
+                powerUps[powerUpCount].x = MAP_OFFSET_X + (float)(j * TILE_SIZE) + 8.0f;
+                powerUps[powerUpCount].y = MAP_OFFSET_Y + (float)(i * TILE_SIZE) + 8.0f;
+
                 int rType = rand() % 10;
-                int t = (rType < 4) ? 1 : ((rType < 7) ? 2 : 3);
-                powerUps[powerUpCount] = { MAP_OFFSET_X + j * TILE_SIZE + 8.0f, MAP_OFFSET_Y + i * TILE_SIZE + 8.0f, t, true };
+                if (rType < 4) powerUps[powerUpCount].type = 1;
+                else if (rType < 7) powerUps[powerUpCount].type = 2;
+                else powerUps[powerUpCount].type = 3;
+
+                powerUps[powerUpCount].isActive = true;
                 powerUpCount++;
             }
         }
     }
 }
 
+// Places a guard cleanly in a far-ahead corridor tile well away from player and other guards
+static bool PlaceGuardFarAhead(
+    Guard guards[],
+    int guardCount,
+    int guardIdx,
+    char mapData[MAX_ROWS][MAX_COLS],
+    int mapRows,
+    int mapCols,
+    int colStart,
+    int colEnd,
+    float playerX,
+    float playerY,
+    float baseSpeed
+) {
+    int playerCol = (int)((playerX - MAP_OFFSET_X) / TILE_SIZE);
+    int safeStart = playerCol + 14;
+    if (safeStart < colStart) safeStart = colStart;
+
+    int midRow = mapRows / 2;
+    for (int c = safeStart; c < colEnd; c += 2) {
+        int rowOrder[3];
+        rowOrder[0] = (midRow + (guardIdx % 3) - 1);
+        rowOrder[1] = mapRows - 2;
+        rowOrder[2] = 2;
+
+        for (int k = 0; k < 3; k++) {
+            int r = rowOrder[k];
+            if (IsSafeOpenForGuard(mapData, mapRows, mapCols, r, c)) {
+                float sx = MAP_OFFSET_X + (float)(c * TILE_SIZE) + 8.0f;
+                float sy = MAP_OFFSET_Y + (float)(r * TILE_SIZE) + 8.0f;
+                float dx = sx - playerX;
+                float dy = sy - playerY;
+
+                bool spacedFromOthers = true;
+                for (int m = 0; m < guardCount; m++) {
+                    if (m == guardIdx) continue;
+                    float gdx = sx - guards[m].x;
+                    float gdy = sy - guards[m].y;
+                    if (sqrtf(gdx * gdx + gdy * gdy) < 380.0f) {
+                        spacedFromOthers = false;
+                        break;
+                    }
+                }
+
+                if (sqrtf(dx * dx + dy * dy) >= 560.0f && spacedFromOthers) {
+                    guards[guardIdx].x = sx;
+                    guards[guardIdx].y = sy;
+                    guards[guardIdx].startX = sx - 64.0f;
+                    guards[guardIdx].endX = sx + 64.0f;
+                    guards[guardIdx].speed = (guardIdx % 2 == 0) ? baseSpeed : -baseSpeed;
+                    guards[guardIdx].state = 0;
+                    guards[guardIdx].stunTimer = 0.0f;
+                    guards[guardIdx].isDefeated = false;
+                    guards[guardIdx].dirRow = (guards[guardIdx].speed >= 0.0f) ? 2 : 1;
+                    guards[guardIdx].animFrame = 1;
+                    guards[guardIdx].animTimer = 0.0f;
+                    guards[guardIdx].grabTimer = 0.0f;
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 inline void AdvanceEndlessWorldSeamlessly(
-    char mapData[MAX_ROWS][MAX_COLS], int mapRows, int mapCols,
-    Player& player, float& cameraX, float& targetCamX,
-    Locker lockers[], int& lockerCount,
-    Guard guards[], int& guardCount, int& activeGuardCount,
-    PowerUp powerUps[], int& powerUpCount,
-    int objectiveNum, int& loopCount, int shiftCols
+    char mapData[MAX_ROWS][MAX_COLS],
+    int mapRows,
+    int mapCols,
+    Player& player,
+    float& cameraX,
+    float& targetCamX,
+    Locker lockers[],
+    int& lockerCount,
+    Guard guards[],
+    int& guardCount,
+    int& activeGuardCount,
+    PowerUp powerUps[],
+    int& powerUpCount,
+    int objectiveNum,
+    int& loopCount,
+    int shiftCols
 ) {
     if (mapCols <= shiftCols + 8) return;
+
     loopCount++;
     float shiftX = (float)(shiftCols * TILE_SIZE);
-    int keepCols = mapCols - shiftCols;
 
+    int keepCols = mapCols - shiftCols;
     for (int r = 0; r < mapRows; r++) {
-        for (int c = 0; c < keepCols; c++) mapData[r][c] = mapData[r][c + shiftCols];
-        for (int c = keepCols; c < mapCols; c++) mapData[r][c] = (r == 0 || r == mapRows - 1 || c == mapCols - 1) ? '#' : '.';
+        for (int c = 0; c < keepCols; c++) {
+            mapData[r][c] = mapData[r][c + shiftCols];
+        }
+        for (int c = keepCols; c < mapCols; c++) {
+            mapData[r][c] = (r == 0 || r == mapRows - 1 || c == mapCols - 1) ? '#' : '.';
+        }
+    }
+
+    for (int c = keepCols - 2; c <= keepCols + 2 && c < mapCols - 1; c++) {
+        if (c >= 1) {
+            for (int r = 1; r < mapRows - 1; r++) {
+                if (mapData[r][c] == '#') {
+                    mapData[r][c] = '.';
+                }
+            }
+        }
     }
 
     int difficultyStep = loopCount + (objectiveNum - 1);
@@ -315,13 +610,65 @@ inline void AdvanceEndlessWorldSeamlessly(
     if (cameraX < 0.0f) cameraX = 0.0f;
     if (targetCamX < 0.0f) targetCamX = 0.0f;
 
-    ShiftLockersWorldX(lockers, lockerCount, shiftX);
+    int keptLockers = 0;
+    for (int i = 0; i < lockerCount; i++) {
+        lockers[i].x -= shiftX;
+        if (lockers[i].x >= MAP_OFFSET_X - TILE_SIZE * 4.0f) {
+            lockers[keptLockers] = lockers[i];
+            keptLockers++;
+        }
+    }
+    lockerCount = keptLockers;
     AppendLockersInColumnRange(mapData, mapRows, mutateStart, mapCols - 1, lockers, lockerCount);
 
-    ShiftPowerUpsWorldX(powerUps, powerUpCount, shiftX);
+    int keptPowerUps = 0;
+    for (int i = 0; i < powerUpCount; i++) {
+        powerUps[i].x -= shiftX;
+        if (powerUps[i].isActive && powerUps[i].x >= MAP_OFFSET_X - TILE_SIZE * 4.0f) {
+            powerUps[keptPowerUps] = powerUps[i];
+            keptPowerUps++;
+        }
+    }
+    powerUpCount = keptPowerUps;
     AppendPowerUpsInColumnRange(mapData, mapRows, mutateStart, mapCols - 1, powerUps, powerUpCount);
 
-    ShiftGuardsWorldX(guards, guardCount, shiftX);
+    int clampedDiff = (difficultyStep > 6) ? 6 : difficultyStep;
+    float baseSpeed = 1.90f + (float)clampedDiff * 0.11f;
+
+    int keptGuards = 0;
+    for (int i = 0; i < guardCount; i++) {
+        if (guards[i].isDefeated) continue;
+        guards[i].x -= shiftX;
+        guards[i].startX -= shiftX;
+        guards[i].endX -= shiftX;
+
+        if (guards[i].x < MAP_OFFSET_X - TILE_SIZE * 3.0f) {
+            PlaceGuardFarAhead(
+                guards, keptGuards, keptGuards, mapData, mapRows, mapCols,
+                mutateStart + 2, mapCols - 3, player.x, player.y, baseSpeed
+            );
+        }
+
+        guards[keptGuards] = guards[i];
+        keptGuards++;
+    }
+    guardCount = keptGuards;
+
+    int minDesiredPool = INITIAL_GUARDS + 1;
+    if (minDesiredPool > MAX_GUARDS) minDesiredPool = MAX_GUARDS;
+
+    while (guardCount < minDesiredPool && guardCount < MAX_GUARDS) {
+        if (PlaceGuardFarAhead(
+            guards, guardCount, guardCount, mapData, mapRows, mapCols,
+            mutateStart + 2, mapCols - 3, player.x, player.y, baseSpeed
+        )) {
+            guardCount++;
+        }
+        else {
+            break;
+        }
+    }
+
     int desired = INITIAL_GUARDS + ((objectiveNum - 1) / 2) + 1;
     if (desired > MAX_ACTIVE_GUARDS) desired = MAX_ACTIVE_GUARDS;
     if (desired > guardCount) desired = guardCount;
@@ -331,7 +678,9 @@ inline void AdvanceEndlessWorldSeamlessly(
 inline void UpdateGameTimer(float& levelTimer, GameState& currentState, float dt) {
     if (levelTimer > 0.0f) {
         levelTimer -= dt;
-        if (levelTimer < 0.0f) levelTimer = 0.0f;
+        if (levelTimer < 0.0f) {
+            levelTimer = 0.0f;
+        }
     }
     else {
         currentState = GAME_OVER;
@@ -354,6 +703,7 @@ inline void ProcessEndlessEXPObjective(
     if (player.score >= currentTargetEXP) {
         objectiveNum++;
         currentTargetEXP += 100 + (objectiveNum - 2) * 20;
+
         float bonusTime = GetNextObjectiveBonusTime(objectiveNum);
         levelTimer += bonusTime;
         lastBonusAdded = bonusTime;
