@@ -24,20 +24,15 @@ inline bool IsPassableGuardTile(char ch) {
 inline bool IsSafeOpenForGuard(char mapData[MAX_ROWS][MAX_COLS], int mapRows, int mapCols, int r, int c) {
     if (r <= 1 || r >= mapRows - 2 || c <= 6 || c >= mapCols - 4) return false;
     if (!IsPassableGuardTile(mapData[r][c])) return false;
-
     bool topOpen = IsPassableGuardTile(mapData[r - 1][c]);
     bool botOpen = IsPassableGuardTile(mapData[r + 1][c]);
     if (!topOpen || !botOpen) return false;
-
     bool leftOpen = IsPassableGuardTile(mapData[r][c - 1]) && IsPassableGuardTile(mapData[r][c - 2]);
     bool rightOpen = IsPassableGuardTile(mapData[r][c + 1]) && IsPassableGuardTile(mapData[r][c + 2]);
     if (!leftOpen || !rightOpen) return false;
-
-    int openNeighbors = 0;
-    if (topOpen) openNeighbors++;
-    if (botOpen) openNeighbors++;
-    if (IsPassableGuardTile(mapData[r][c - 1])) openNeighbors++;
-    if (IsPassableGuardTile(mapData[r][c + 1])) openNeighbors++;
+    int openNeighbors = (topOpen ? 1 : 0) + (botOpen ? 1 : 0) +
+        (IsPassableGuardTile(mapData[r][c - 1]) ? 1 : 0) +
+        (IsPassableGuardTile(mapData[r][c + 1]) ? 1 : 0);
     return (openNeighbors >= 3);
 }
 
@@ -47,22 +42,25 @@ inline void InitializeGuards(Guard guards[], int& guardCount, int& activeGuardCo
     int playerCol = (int)((playerX - MAP_OFFSET_X) / TILE_SIZE);
     int startSearchCol = playerCol + 16;
     if (startSearchCol < 16) startSearchCol = 16;
+    int midRow = mapRows / 2;
 
-    for (int c = startSearchCol; c < mapCols - 4 && guardCount < MAX_GUARDS; c += 5) {
-        for (int r = 1; r < mapRows - 1 && guardCount < MAX_GUARDS; r++) {
-            if (IsSafeOpenForGuard(mapData, mapRows, mapCols, r, c)) {
-                float sx = MAP_OFFSET_X + c * TILE_SIZE + 8.0f;
-                float sy = MAP_OFFSET_Y + r * TILE_SIZE + 8.0f;
-                float dx = sx - playerX, dy = sy - playerY;
-                bool spaced = true;
-                for (int k = 0; k < guardCount; k++) {
-                    float gdx = sx - guards[k].x, gdy = sy - guards[k].y;
-                    if (sqrtf(gdx * gdx + gdy * gdy) < 380.0f) { spaced = false; break; }
-                }
-                if (sqrtf(dx * dx + dy * dy) >= 560.0f && spaced) {
-                    guards[guardCount] = { sx, sy, sx - 64.0f, sx + 64.0f, (guardCount % 2 == 0) ? baseSpeed : -baseSpeed, 0, 0.0f, false, 2, 1, 0.0f, 0.0f };
-                    guardCount++;
-                    break;
+    for (int bandPass = 0; bandPass < 2 && guardCount < MAX_GUARDS; bandPass++) {
+        for (int c = startSearchCol; c < mapCols - 4 && guardCount < MAX_GUARDS; c += 5) {
+            for (int r = 1; r < mapRows - 1 && guardCount < MAX_GUARDS; r++) {
+                bool isLowerOrMid = (r >= midRow - 1);
+                if ((bandPass == 0 && !isLowerOrMid) || (bandPass == 1 && isLowerOrMid)) continue;
+                if (IsSafeOpenForGuard(mapData, mapRows, mapCols, r, c)) {
+                    float sx = MAP_OFFSET_X + c * TILE_SIZE + 8.0f, sy = MAP_OFFSET_Y + r * TILE_SIZE + 8.0f;
+                    float dx = sx - playerX, dy = sy - playerY;
+                    bool spaced = true;
+                    for (int k = 0; k < guardCount; k++) {
+                        if (sqrtf((sx - guards[k].x) * (sx - guards[k].x) + (sy - guards[k].y) * (sy - guards[k].y)) < 380.0f) { spaced = false; break; }
+                    }
+                    if (sqrtf(dx * dx + dy * dy) >= 560.0f && spaced) {
+                        guards[guardCount] = { sx, sy, sx - 64.0f, sx + 64.0f, (guardCount % 2 == 0) ? baseSpeed : -baseSpeed, 0, 0.0f, false, 2, 1, 0.0f, 0.0f };
+                        guardCount++;
+                        break;
+                    }
                 }
             }
         }
@@ -70,19 +68,26 @@ inline void InitializeGuards(Guard guards[], int& guardCount, int& activeGuardCo
     activeGuardCount = (guardCount < INITIAL_GUARDS) ? guardCount : INITIAL_GUARDS;
 }
 
+inline void ShiftGuardsWorldX(Guard guards[], int guardCount, float shiftX) {
+    for (int i = 0; i < guardCount; i++) { guards[i].x -= shiftX; guards[i].startX -= shiftX; guards[i].endX -= shiftX; }
+}
+
 inline void InitializePowerUps(char mapData[MAX_ROWS][MAX_COLS], int rows, int cols, PowerUp powerUps[], int& powerUpCount) {
     powerUpCount = 0;
     int seenP = 0;
-    for (int i = 0; i < rows; i++) {
-        for (int j = 0; j < cols; j++) {
-            if (mapData[i][j] == 'P' && powerUpCount < MAX_POWERUPS) {
-                seenP++;
-                if ((seenP % 3 != 1) && (rand() % 100 < 55)) continue;
-                powerUps[powerUpCount] = { MAP_OFFSET_X + j * TILE_SIZE + 8.0f, MAP_OFFSET_Y + i * TILE_SIZE + 8.0f, (rand() % 3) + 1, true };
-                powerUpCount++;
-            }
+    for (int i = 0; i < rows; i++) for (int j = 0; j < cols; j++) {
+        if (mapData[i][j] == 'P' && powerUpCount < MAX_POWERUPS) {
+            seenP++;
+            if ((seenP % 3 != 1) && (rand() % 100 < 55)) continue;
+            int rType = rand() % 10;
+            powerUps[powerUpCount] = { MAP_OFFSET_X + j * TILE_SIZE + 8.0f, MAP_OFFSET_Y + i * TILE_SIZE + 8.0f, (rType < 4) ? 1 : ((rType < 7) ? 2 : 3), true };
+            powerUpCount++;
         }
     }
+}
+
+inline void ShiftPowerUpsWorldX(PowerUp powerUps[], int powerUpCount, float shiftX) {
+    for (int i = 0; i < powerUpCount; i++) powerUps[i].x -= shiftX;
 }
 
 inline void UpdatePowerUps(Player& player, PowerUp powerUps[], int powerUpCount, Guard guards[], int activeGuardCount) {
